@@ -1,18 +1,17 @@
 import axios from "axios";
+import * as cheerio from "cheerio";
 
 export default async function handler(req, res) {
 
   let { cnic } = req.query;
 
   if (!cnic) {
-    return res.status(400).json({
-      success: false,
-      message: "CNIC required"
-    });
+    return res.status(400).json({ success: false, message: "CNIC required" });
   }
 
   try {
 
+    // 1️⃣ GET PAGE (cookie + csrf)
     const page = await axios.get(
       "https://online.pnmc.gov.pk/track/nursing-professional"
     );
@@ -23,9 +22,11 @@ export default async function handler(req, res) {
       /name="csrf-token" content="(.*?)"/
     )?.[1];
 
+    // 2️⃣ CLEAN CNIC
     cnic = cnic.replace(/-/g, "");
 
-    const response = await axios.post(
+    // 3️⃣ POST REQUEST
+    const post = await axios.post(
       "https://online.pnmc.gov.pk/track/nursing-professional",
       new URLSearchParams({
         "track_nursing_professional[username]": cnic,
@@ -35,22 +36,41 @@ export default async function handler(req, res) {
       {
         headers: {
           "Cookie": cookies.join("; "),
-          "Content-Type": "application/x-www-form-urlencoded",
           "User-Agent": "Mozilla/5.0",
+          "Content-Type": "application/x-www-form-urlencoded",
           "Referer": "https://online.pnmc.gov.pk/track/nursing-professional"
         }
       }
     );
 
-    const html = response.data;
+    // 4️⃣ PARSE HTML (REAL FIX)
+    const $ = cheerio.load(post.data);
 
     const getValue = (label) => {
-      const r = new RegExp(`${label}<\\/td>\\s*<td>(.*?)<\\/td>`, "i");
-      return html.match(r)?.[1]?.trim() || null;
+      let value = null;
+
+      $("tr").each((i, el) => {
+        const key = $(el).find("td").first().text().trim();
+        const val = $(el).find("td").last().text().trim();
+
+        if (key === label) {
+          value = val;
+        }
+      });
+
+      return value;
     };
 
-    const img = html.match(/<img[^>]+src="([^"]+)"/i);
+    // 5️⃣ PHOTO FIX
+    let photo = null;
+    $("img").each((i, el) => {
+      const src = $(el).attr("src");
+      if (src && src.includes("uploads")) {
+        photo = "https://online.pnmc.gov.pk" + src;
+      }
+    });
 
+    // 6️⃣ RESPONSE
     return res.json({
       success: true,
       data: {
@@ -59,7 +79,7 @@ export default async function handler(req, res) {
         registration_number: getValue("Registration Number"),
         category: getValue("Registration Category"),
         license_expiry: getValue("License Expiration Date"),
-        photo: img ? "https://online.pnmc.gov.pk" + img[1] : null
+        photo: photo
       }
     });
 
@@ -69,4 +89,4 @@ export default async function handler(req, res) {
       error: err.message
     });
   }
-      }
+}
