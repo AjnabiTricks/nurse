@@ -13,22 +13,25 @@ export default async function handler(req, res) {
 
   try {
 
-    // 1️⃣ GET PAGE
+    // 1️⃣ GET PAGE (SESSION + CSRF)
     const page = await axios.get(
-      "https://online.pnmc.gov.pk/track/nursing-professional"
+      "https://online.pnmc.gov.pk/track/nursing-professional",
+      {
+        headers: {
+          "User-Agent": "Mozilla/5.0"
+        }
+      }
     );
 
     const cookies = page.headers["set-cookie"] || [];
 
-    const csrf = page.data.match(
-      /name="csrf-token" content="(.*?)"/
-    )?.[1];
+    const csrf =
+      page.data.match(/name="csrf-token" content="(.*?)"/)?.[1] || "";
 
-    // 🔥 DEBUG LINE ADDED (IMPORTANT)
+    // 🔥 DEBUG (important)
     console.log("CSRF:", csrf);
-    console.log("Cookies:", cookies);
 
-    // 2️⃣ POST REQUEST
+    // 2️⃣ POST REQUEST (SEARCH)
     const post = await axios.post(
       "https://online.pnmc.gov.pk/track/nursing-professional",
       new URLSearchParams({
@@ -38,28 +41,30 @@ export default async function handler(req, res) {
       }),
       {
         headers: {
-          "Cookie": cookies.join("; "),
           "User-Agent": "Mozilla/5.0",
           "Content-Type": "application/x-www-form-urlencoded",
+          "Cookie": cookies.join("; "),
           "Referer": "https://online.pnmc.gov.pk/track/nursing-professional"
         }
       }
     );
 
-    // 🔥 DEBUG LINE (MOST IMPORTANT)
-    console.log("HTML LENGTH:", post.data.length);
-    console.log("HTML SAMPLE:", post.data.substring(0, 800));
+    const html = post.data;
 
-    const $ = cheerio.load(post.data);
+    // 🔥 DEBUG OUTPUT (VERY IMPORTANT)
+    console.log("HTML LENGTH:", html.length);
+    console.log("HTML SAMPLE:", html.substring(0, 500));
+
+    const $ = cheerio.load(html);
 
     const data = {};
 
     $("tr").each((i, el) => {
       const key = $(el).find("td").first().text().trim();
-      const val = $(el).find("td").last().text().trim();
+      const value = $(el).find("td").last().text().trim();
 
-      if (key && val) {
-        data[key] = val;
+      if (key && value) {
+        data[key] = value;
       }
     });
 
@@ -72,24 +77,29 @@ export default async function handler(req, res) {
       }
     });
 
-    // 🔥 FINAL CHECK (NULL ERROR SOLVER)
+    // 🔥 FINAL SMART CHECK (NO NULL RESPONSE)
     if (Object.keys(data).length === 0) {
+
       return res.json({
         success: false,
-        message: "No data found in response (request failed or blocked)",
-        debug_html: post.data.substring(0, 1000)
+        message: "No data extracted - server did not return result page",
+        debug: {
+          csrf_used: csrf,
+          html_preview: html.substring(0, 800)
+        }
       });
     }
 
+    // ✔ SUCCESS RESPONSE
     return res.json({
       success: true,
       data: {
-        full_name: data["Full Name"] || null,
-        cnic: data["NIC Number"] || null,
-        registration_number: data["Registration Number"] || null,
-        category: data["Registration Category"] || null,
-        license_expiry: data["License Expiration Date"] || null,
-        photo
+        full_name: data["Full Name"] || "N/A",
+        cnic: data["NIC Number"] || "N/A",
+        registration_number: data["Registration Number"] || "N/A",
+        category: data["Registration Category"] || "N/A",
+        license_expiry: data["License Expiration Date"] || "N/A",
+        photo: photo || "N/A"
       }
     });
 
