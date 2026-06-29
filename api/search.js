@@ -6,12 +6,14 @@ export default async function handler(req, res) {
   let { cnic } = req.query;
 
   if (!cnic) {
-    return res.status(400).json({ success: false, message: "CNIC required" });
+    return res.json({ success: false, message: "CNIC required" });
   }
+
+  cnic = cnic.replace(/-/g, "");
 
   try {
 
-    // 1️⃣ GET PAGE (cookie + csrf)
+    // 1️⃣ GET PAGE
     const page = await axios.get(
       "https://online.pnmc.gov.pk/track/nursing-professional"
     );
@@ -22,10 +24,11 @@ export default async function handler(req, res) {
       /name="csrf-token" content="(.*?)"/
     )?.[1];
 
-    // 2️⃣ CLEAN CNIC
-    cnic = cnic.replace(/-/g, "");
+    // 🔥 DEBUG LINE ADDED (IMPORTANT)
+    console.log("CSRF:", csrf);
+    console.log("Cookies:", cookies);
 
-    // 3️⃣ POST REQUEST
+    // 2️⃣ POST REQUEST
     const post = await axios.post(
       "https://online.pnmc.gov.pk/track/nursing-professional",
       new URLSearchParams({
@@ -43,26 +46,25 @@ export default async function handler(req, res) {
       }
     );
 
-    // 4️⃣ PARSE HTML (REAL FIX)
+    // 🔥 DEBUG LINE (MOST IMPORTANT)
+    console.log("HTML LENGTH:", post.data.length);
+    console.log("HTML SAMPLE:", post.data.substring(0, 800));
+
     const $ = cheerio.load(post.data);
 
-    const getValue = (label) => {
-      let value = null;
+    const data = {};
 
-      $("tr").each((i, el) => {
-        const key = $(el).find("td").first().text().trim();
-        const val = $(el).find("td").last().text().trim();
+    $("tr").each((i, el) => {
+      const key = $(el).find("td").first().text().trim();
+      const val = $(el).find("td").last().text().trim();
 
-        if (key === label) {
-          value = val;
-        }
-      });
+      if (key && val) {
+        data[key] = val;
+      }
+    });
 
-      return value;
-    };
-
-    // 5️⃣ PHOTO FIX
     let photo = null;
+
     $("img").each((i, el) => {
       const src = $(el).attr("src");
       if (src && src.includes("uploads")) {
@@ -70,21 +72,29 @@ export default async function handler(req, res) {
       }
     });
 
-    // 6️⃣ RESPONSE
+    // 🔥 FINAL CHECK (NULL ERROR SOLVER)
+    if (Object.keys(data).length === 0) {
+      return res.json({
+        success: false,
+        message: "No data found in response (request failed or blocked)",
+        debug_html: post.data.substring(0, 1000)
+      });
+    }
+
     return res.json({
       success: true,
       data: {
-        full_name: getValue("Full Name"),
-        cnic: getValue("NIC Number"),
-        registration_number: getValue("Registration Number"),
-        category: getValue("Registration Category"),
-        license_expiry: getValue("License Expiration Date"),
-        photo: photo
+        full_name: data["Full Name"] || null,
+        cnic: data["NIC Number"] || null,
+        registration_number: data["Registration Number"] || null,
+        category: data["Registration Category"] || null,
+        license_expiry: data["License Expiration Date"] || null,
+        photo
       }
     });
 
   } catch (err) {
-    return res.status(500).json({
+    return res.json({
       success: false,
       error: err.message
     });
