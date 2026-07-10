@@ -1,47 +1,48 @@
-import * as cheerio from "cheerio";
-
 export default async function handler(req, res) {
 
   const cnic = req.query.cnic;
 
   if (!cnic) {
-    return res.status(400).json({
-      error: "CNIC required"
-    });
+    return res.status(400).send("CNIC required");
   }
 
   try {
 
+    // Step 1: Get PNMC page
     const getResponse = await fetch(
       "https://online.pnmc.gov.pk/track/nursing-professional",
       {
-        headers:{
-          "User-Agent":"Mozilla/5.0",
-          "Accept":"text/html"
+        headers: {
+          "User-Agent": "Mozilla/5.0"
         }
       }
     );
 
-
     const getHTML = await getResponse.text();
 
-    const $ = cheerio.load(getHTML);
 
-    const token = $('meta[name="csrf-token"]').attr("content");
+    // Extract CSRF Token
+    const tokenMatch = getHTML.match(
+      /name="csrf-token" content="([^"]+)"/
+    );
+
+    const token = tokenMatch
+      ? tokenMatch[1]
+      : "";
 
 
-    // Extract only cookies
-    const rawCookies = getResponse.headers.getSetCookie
-      ? getResponse.headers.getSetCookie()
-      : [];
+    // Extract Cookie
+    const setCookie =
+      getResponse.headers.get("set-cookie") || "";
 
 
-    const cookie = rawCookies
+    const cookie = setCookie
+      .split(",")
       .map(c => c.split(";")[0])
-      .join("; ");
+      .join(";");
 
 
-
+    // Step 2: POST Search
     const form = new URLSearchParams();
 
     form.append(
@@ -63,38 +64,38 @@ export default async function handler(req, res) {
     const postResponse = await fetch(
       "https://online.pnmc.gov.pk/track/nursing-professional",
       {
-        method:"POST",
-        headers:{
-          "User-Agent":"Mozilla/5.0",
+        method: "POST",
+        headers: {
+          "User-Agent": "Mozilla/5.0",
           "Content-Type":
           "application/x-www-form-urlencoded",
-          "Cookie":cookie,
+          "Cookie": cookie,
           "Referer":
           "https://online.pnmc.gov.pk/track/nursing-professional"
         },
-        body:form.toString()
+        body: form.toString()
       }
     );
 
 
-    const html = await postResponse.text();
+    const result = await postResponse.text();
 
 
-    return res.json({
-      success:true,
-      cookie_used:cookie ? true:false,
-      response_length:html.length,
-      has_name:html.includes("Full Name"),
-      preview:html.substring(html.indexOf("Full Name")-200, html.indexOf("Full Name")+500)
-    });
+    // Return raw PNMC response
+    res.setHeader(
+      "Content-Type",
+      "text/html; charset=utf-8"
+    );
+
+    res.status(200).send(result);
 
 
-  } catch(e){
+  } catch (error) {
 
-    return res.status(500).json({
-      error:e.message
-    });
+    res.status(500).send(
+      error.message
+    );
 
   }
 
-      }
+}
