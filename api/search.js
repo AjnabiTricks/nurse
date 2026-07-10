@@ -1,23 +1,20 @@
-import axios from "axios";
+import fetch from "node-fetch";
 import * as cheerio from "cheerio";
 
 export default async function handler(req, res) {
 
-  let { cnic } = req.query;
+  const cnic = req.query.cnic || req.body?.cnic;
 
   if (!cnic) {
-    return res.json({
-      success: false,
-      message: "CNIC required"
+    return res.status(400).json({
+      error: "CNIC required"
     });
   }
 
-  cnic = cnic.replace(/-/g, "");
-
   try {
 
-    // 1️⃣ Load page (session + CSRF)
-    const page = await axios.get(
+    // Get page for CSRF token + session
+    const page = await fetch(
       "https://online.pnmc.gov.pk/track/nursing-professional",
       {
         headers: {
@@ -26,15 +23,103 @@ export default async function handler(req, res) {
       }
     );
 
-    const cookies = page.headers["set-cookie"] || [];
+    const html = await page.text();
 
-    const csrf = page.data.match(
-      /name="csrf-token" content="(.*?)"/
-    )?.[1] || "";
+    const $ = cheerio.load(html);
 
-    // 2️⃣ Submit search
-    const post = await axios.post(
+    const token = $('meta[name="csrf-token"]').attr("content");
+
+    const cookie = page.headers.get("set-cookie");
+
+
+    if (!token) {
+      return res.status(500).json({
+        error: "Token not found"
+      });
+    }
+
+
+    // POST request
+    const form = new URLSearchParams();
+
+    form.append(
+      "track_nursing_professional[username]",
+      cnic
+    );
+
+    form.append(
+      "track_nursing_professional[search]",
+      ""
+    );
+
+    form.append(
+      "track_nursing_professional[_token]",
+      token
+    );
+
+
+    const response = await fetch(
       "https://online.pnmc.gov.pk/track/nursing-professional",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type":
+          "application/x-www-form-urlencoded",
+
+          "Cookie": cookie || "",
+
+          "User-Agent":
+          "Mozilla/5.0"
+        },
+        body: form
+      }
+    );
+
+
+    const result = await response.text();
+
+    const $$ = cheerio.load(result);
+
+
+    let data = {};
+
+
+    $$("table tr").each((i, row)=>{
+
+      const cols = $$(row).find("td");
+
+      if(cols.length >= 2){
+
+        const key = $$(cols[0])
+          .text()
+          .trim();
+
+        const value = $$(cols[1])
+          .text()
+          .trim();
+
+        data[key] = value;
+
+      }
+
+    });
+
+
+    return res.json({
+      success: true,
+      data: data
+    });
+
+
+  } catch(error){
+
+    return res.status(500).json({
+      error: error.message
+    });
+
+  }
+
+}      "https://online.pnmc.gov.pk/track/nursing-professional",
       new URLSearchParams({
         "track_nursing_professional[username]": cnic,
         "track_nursing_professional[search]": "",
