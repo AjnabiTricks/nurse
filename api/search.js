@@ -12,15 +12,16 @@ export default async function handler(req, res) {
 
   try {
 
-    // 1. Get page (CSRF + Cookie)
     const getResponse = await fetch(
       "https://online.pnmc.gov.pk/track/nursing-professional",
       {
-        headers: {
-          "User-Agent": "Mozilla/5.0"
+        headers:{
+          "User-Agent":"Mozilla/5.0",
+          "Accept":"text/html"
         }
       }
     );
+
 
     const getHTML = await getResponse.text();
 
@@ -28,17 +29,19 @@ export default async function handler(req, res) {
 
     const token = $('meta[name="csrf-token"]').attr("content");
 
-    const cookie = getResponse.headers.get("set-cookie");
+
+    // Extract only cookies
+    const rawCookies = getResponse.headers.getSetCookie
+      ? getResponse.headers.getSetCookie()
+      : [];
 
 
-    if (!token) {
-      return res.status(500).json({
-        error: "CSRF token missing"
-      });
-    }
+    const cookie = rawCookies
+      .map(c => c.split(";")[0])
+      .join("; ");
 
 
-    // 2. POST Search
+
     const form = new URLSearchParams();
 
     form.append(
@@ -60,65 +63,38 @@ export default async function handler(req, res) {
     const postResponse = await fetch(
       "https://online.pnmc.gov.pk/track/nursing-professional",
       {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/x-www-form-urlencoded",
-          "Cookie": cookie || "",
-          "User-Agent": "Mozilla/5.0",
-          "Referer": "https://online.pnmc.gov.pk/track/nursing-professional"
+        method:"POST",
+        headers:{
+          "User-Agent":"Mozilla/5.0",
+          "Content-Type":
+          "application/x-www-form-urlencoded",
+          "Cookie":cookie,
+          "Referer":
+          "https://online.pnmc.gov.pk/track/nursing-professional"
         },
-        body: form.toString()
+        body:form.toString()
       }
     );
 
 
-    const postHTML = await postResponse.text();
-
-
-    const $$ = cheerio.load(postHTML);
-
-
-    let data = {};
-
-
-    $$("table tr").each((index, row)=>{
-
-      const columns = $$(row).find("td");
-
-      if(columns.length >= 2){
-
-        const key = $$(columns[0])
-          .text()
-          .replace(/\s+/g," ")
-          .trim();
-
-        const value = $$(columns[1])
-          .text()
-          .replace(/\s+/g," ")
-          .trim();
-
-
-        if(key){
-          data[key] = value;
-        }
-
-      }
-
-    });
+    const html = await postResponse.text();
 
 
     return res.json({
       success:true,
-      data:data
+      cookie_used:cookie ? true:false,
+      response_length:html.length,
+      has_name:html.includes("Full Name"),
+      preview:html.substring(html.indexOf("Full Name")-200, html.indexOf("Full Name")+500)
     });
 
 
-  } catch(error){
+  } catch(e){
 
     return res.status(500).json({
-      error:error.message
+      error:e.message
     });
 
   }
 
-                       }
+      }
