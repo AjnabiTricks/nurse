@@ -1,100 +1,73 @@
 export default async function handler(req, res) {
 
-  const cnic = req.query.cnic;
-
-  if (!cnic) {
-    return res.status(400).send("CNIC required");
-  }
-
   try {
 
-    // Step 1: Get PNMC page
-    const getResponse = await fetch(
-      "https://online.pnmc.gov.pk/track/nursing-professional",
-      {
-        headers: {
-          "User-Agent": "Mozilla/5.0"
-        }
-      }
-    );
-
-    const getHTML = await getResponse.text();
+    const cnic = req.query.cnic || "17301-1348281-0";
 
 
-    // Extract CSRF Token
-    const tokenMatch = getHTML.match(
-      /name="csrf-token" content="([^"]+)"/
-    );
+    const body = new URLSearchParams();
 
-    const token = tokenMatch
-      ? tokenMatch[1]
-      : "";
-
-
-    // Extract Cookie
-    const setCookie =
-      getResponse.headers.get("set-cookie") || "";
-
-
-    const cookie = setCookie
-      .split(",")
-      .map(c => c.split(";")[0])
-      .join(";");
-
-
-    // Step 2: POST Search
-    const form = new URLSearchParams();
-
-    form.append(
+    body.append(
       "track_nursing_professional[username]",
       cnic
     );
 
-    form.append(
+    body.append(
       "track_nursing_professional[search]",
       ""
     );
 
-    form.append(
+    body.append(
       "track_nursing_professional[_token]",
-      token
+      "AFJ5AX5M5gaOO2DAq9jz--_q6TkbcusHrNeCuxst8xg"
     );
 
 
-    const postResponse = await fetch(
+    const response = await fetch(
       "https://online.pnmc.gov.pk/track/nursing-professional",
       {
-        method: "POST",
-        headers: {
-          "User-Agent": "Mozilla/5.0",
+        method:"POST",
+
+        headers:{
+          "User-Agent":
+          "Mozilla/5.0 (Linux; Android 11; RMX2103 Build/RKQ1.201217.002) AppleWebKit/537.36 Chrome/149.0.7827.160 Mobile Safari/537.36",
+
           "Content-Type":
           "application/x-www-form-urlencoded",
-          "Cookie": cookie,
+
+          "Cookie":
+          "PHPSESSID=f4fde2all3d866lo2nfn04gjp4; _gid=GA1.3.1491353095.1783684000",
+
+          "X-Requested-With":
+          "mark.via.gp",
+
+          "Origin":
+          "https://online.pnmc.gov.pk",
+
           "Referer":
           "https://online.pnmc.gov.pk/track/nursing-professional"
         },
-        body: form.toString()
+
+        body:body.toString()
+
       }
     );
 
 
-    const result = await postResponse.text();
+    const html = await response.text();
 
 
-    // Return raw PNMC response
     res.setHeader(
-      "Content-Type",
-      "text/html; charset=utf-8"
+      "content-type",
+      "text/html"
     );
 
-    res.status(200).send(result);
+    res.send(html);
 
 
-  } catch (error) {
+  } catch(error){
 
-    res.status(500).send(
-      error.message
-    );
+    res.status(500).send(error.message);
 
   }
 
