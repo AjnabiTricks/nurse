@@ -4,7 +4,7 @@ export default async function handler(req, res) {
 
   try {
 
-    const cnic = req.query.cnic;
+    let cnic = req.query.cnic;
 
 
     if (!cnic) {
@@ -15,22 +15,43 @@ export default async function handler(req, res) {
     }
 
 
+    // Remove dashes and convert to PNMC format
+    cnic = cnic.replace(/-/g, "");
+
+
+    if (cnic.length === 13) {
+
+      cnic =
+        cnic.substring(0,5) +
+        "-" +
+        cnic.substring(5,12) +
+        "-" +
+        cnic.substring(12);
+
+    }
+
+
+
     const body = new URLSearchParams();
+
 
     body.append(
       "track_nursing_professional[username]",
       cnic
     );
 
+
     body.append(
       "track_nursing_professional[search]",
       ""
     );
 
+
     body.append(
       "track_nursing_professional[_token]",
       "AFJ5AX5M5gaOO2DAq9jz--_q6TkbcusHrNeCuxst8xg"
     );
+
 
 
     const response = await fetch(
@@ -39,50 +60,67 @@ export default async function handler(req, res) {
         method:"POST",
 
         headers:{
+
           "User-Agent":
           "Mozilla/5.0 (Linux; Android 11)",
+
 
           "Content-Type":
           "application/x-www-form-urlencoded",
 
+
           "Cookie":
           "PHPSESSID=f4fde2all3d866lo2nfn04gjp4; _gid=GA1.3.1491353095.1783684000",
+
 
           "X-Requested-With":
           "mark.via.gp",
 
+
           "Origin":
           "https://online.pnmc.gov.pk",
 
+
           "Referer":
           "https://online.pnmc.gov.pk/track/nursing-professional"
+
         },
 
+
         body:body.toString()
+
       }
     );
+
 
 
     const html = await response.text();
 
 
+
     const $ = cheerio.load(html);
+
 
 
     let data = {};
 
 
+
     $("table tr").each((i,row)=>{
+
 
       const cols = $(row).find("td");
 
 
+
       if(cols.length >= 2){
+
 
         const key = $(cols[0])
           .text()
           .replace(/\s+/g," ")
           .trim();
+
 
 
         const value = $(cols[1])
@@ -91,20 +129,27 @@ export default async function handler(req, res) {
           .trim();
 
 
+
         if(key){
+
           data[key] = value;
+
         }
 
       }
 
+
     });
 
 
-    // Profile Picture
+
+    // Profile Photo
+
     let photo = null;
 
 
     const img = $("img[src*='/uploads/media/']").first();
+
 
 
     if(img.length){
@@ -114,6 +159,7 @@ export default async function handler(req, res) {
       img.attr("src");
 
     }
+
 
 
     res.json({
@@ -127,7 +173,9 @@ export default async function handler(req, res) {
     });
 
 
+
   } catch(error){
+
 
     res.status(500).json({
 
@@ -136,6 +184,7 @@ export default async function handler(req, res) {
       error:error.message
 
     });
+
 
   }
 
