@@ -1,82 +1,19 @@
 import * as cheerio from "cheerio";
-import { CookieJar } from "tough-cookie";
-
 
 export default async function handler(req, res) {
 
-  const cnic = req.query.cnic;
-
-  if (!cnic) {
-    return res.status(400).json({
-      success:false,
-      error:"CNIC required"
-    });
-  }
-
-
   try {
 
-    const jar = new CookieJar();
+    const cnic = req.query.cnic;
 
-
-    const url =
-    "https://online.pnmc.gov.pk/track/nursing-professional";
-
-
-    // 1. GET page
-    const getResponse = await fetch(url,{
-      headers:{
-        "User-Agent":
-        "Mozilla/5.0 (Linux; Android 11)"
-      }
-    });
-
-
-    const getHTML = await getResponse.text();
-
-
-    // Save cookies
-    const setCookie =
-    getResponse.headers.get("set-cookie");
-
-
-    if (setCookie) {
-
-      const cookies = setCookie.split(",");
-
-      for (const cookie of cookies) {
-
-        await jar.setCookie(
-          cookie,
-          url
-        );
-
-      }
-    }
-
-
-    // Extract CSRF
-    const $ = cheerio.load(getHTML);
-
-    const token =
-    $('meta[name="csrf-token"]')
-    .attr("content");
-
-
-    if (!token) {
-      return res.status(500).json({
+    if (!cnic) {
+      return res.status(400).json({
         success:false,
-        error:"CSRF token not found"
+        error:"CNIC required"
       });
     }
 
 
-    const cookieHeader =
-    await jar.getCookieString(url);
-
-
-
-    // 2. POST Search
     const body = new URLSearchParams();
 
     body.append(
@@ -89,79 +26,72 @@ export default async function handler(req, res) {
       ""
     );
 
+    // Apne current working token ko yahan rakhein
     body.append(
       "track_nursing_professional[_token]",
-      token
+      "YOUR_TOKEN_HERE"
     );
 
 
-    const response = await fetch(url,{
+    const response = await fetch(
+      "https://online.pnmc.gov.pk/track/nursing-professional",
+      {
+        method:"POST",
 
-      method:"POST",
+        headers:{
 
-      headers:{
+          "User-Agent":
+          "Mozilla/5.0 (Linux; Android 11)",
 
-        "User-Agent":
-        "Mozilla/5.0 (Linux; Android 11)",
+          "Content-Type":
+          "application/x-www-form-urlencoded",
 
-        "Content-Type":
-        "application/x-www-form-urlencoded",
+          // Apni current working cookie yahan rakhein
+          "Cookie":
+          "YOUR_COOKIE_HERE",
 
-        "Cookie":
-        cookieHeader,
+          "X-Requested-With":
+          "mark.via.gp",
 
-        "X-Requested-With":
-        "mark.via.gp",
+          "Origin":
+          "https://online.pnmc.gov.pk",
 
-        "Origin":
-        "https://online.pnmc.gov.pk",
+          "Referer":
+          "https://online.pnmc.gov.pk/track/nursing-professional"
+        },
 
-        "Referer":
-        url
-
-      },
-
-      body:body.toString()
-
-    });
-
-
-
-    const html =
-    await response.text();
+        body:body.toString()
+      }
+    );
 
 
-    const $$ =
-    cheerio.load(html);
+    const html = await response.text();
+
+    const $ = cheerio.load(html);
 
 
-    let data={};
+    let data = {};
 
 
-    $$("table tr").each((i,row)=>{
+    $("table tr").each((i,row)=>{
 
-      const cols =
-      $$(row).find("td");
-
+      const cols = $(row).find("td");
 
       if(cols.length >= 2){
 
-        const key =
-        $$(cols[0])
-        .text()
-        .replace(/\s+/g," ")
-        .trim();
+        const key = $(cols[0])
+          .text()
+          .replace(/\s+/g," ")
+          .trim();
 
-
-        const value =
-        $$(cols[1])
-        .text()
-        .replace(/\s+/g," ")
-        .trim();
+        const value = $(cols[1])
+          .text()
+          .replace(/\s+/g," ")
+          .trim();
 
 
         if(key){
-          data[key]=value;
+          data[key] = value;
         }
 
       }
@@ -169,22 +99,34 @@ export default async function handler(req, res) {
     });
 
 
+    // Photo URL extract
+    let photo = null;
 
-    return res.json({
+    const img = $("img[src*='/uploads/media/']").first();
+
+    if(img.length){
+
+      photo =
+      "https://online.pnmc.gov.pk" +
+      img.attr("src");
+
+    }
+
+
+    res.json({
 
       success:true,
 
       data:data,
 
-      token_refreshed:true
+      photo:photo
 
     });
 
 
-
   } catch(error){
 
-    return res.status(500).json({
+    res.status(500).json({
 
       success:false,
 
@@ -194,4 +136,4 @@ export default async function handler(req, res) {
 
   }
 
-        }
+}
