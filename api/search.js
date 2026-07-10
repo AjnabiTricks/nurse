@@ -4,14 +4,7 @@ export default async function handler(req, res) {
 
   try {
 
-    const cnic = req.query.cnic;
-
-    if (!cnic) {
-      return res.status(400).json({
-        success:false,
-        error:"CNIC required"
-      });
-    }
+    const cnic = req.query.cnic || "17301-1348281-0";
 
 
     const body = new URLSearchParams();
@@ -26,10 +19,9 @@ export default async function handler(req, res) {
       ""
     );
 
-    // Apne current working token ko yahan rakhein
     body.append(
       "track_nursing_professional[_token]",
-      "YOUR_TOKEN_HERE"
+      "AFJ5AX5M5gaOO2DAq9jz--_q6TkbcusHrNeCuxst8xg"
     );
 
 
@@ -39,16 +31,14 @@ export default async function handler(req, res) {
         method:"POST",
 
         headers:{
-
           "User-Agent":
           "Mozilla/5.0 (Linux; Android 11)",
 
           "Content-Type":
           "application/x-www-form-urlencoded",
 
-          // Apni current working cookie yahan rakhein
           "Cookie":
-          "YOUR_COOKIE_HERE",
+          "PHPSESSID=f4fde2all3d866lo2nfn04gjp4; _gid=GA1.3.1491353095.1783684000",
 
           "X-Requested-With":
           "mark.via.gp",
@@ -67,6 +57,7 @@ export default async function handler(req, res) {
 
     const html = await response.text();
 
+
     const $ = cheerio.load(html);
 
 
@@ -77,12 +68,14 @@ export default async function handler(req, res) {
 
       const cols = $(row).find("td");
 
+
       if(cols.length >= 2){
 
         const key = $(cols[0])
           .text()
           .replace(/\s+/g," ")
           .trim();
+
 
         const value = $(cols[1])
           .text()
@@ -99,7 +92,7 @@ export default async function handler(req, res) {
     });
 
 
-    // Photo URL extract
+    // Profile Picture
     let photo = null;
 
     const img = $("img[src*='/uploads/media/']").first();
