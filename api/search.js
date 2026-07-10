@@ -12,8 +12,8 @@ export default async function handler(req, res) {
 
   try {
 
-    // GET page
-    const page = await fetch(
+    // 1. Get page (CSRF + Cookie)
+    const getResponse = await fetch(
       "https://online.pnmc.gov.pk/track/nursing-professional",
       {
         headers: {
@@ -22,15 +22,23 @@ export default async function handler(req, res) {
       }
     );
 
-    const html = await page.text();
+    const getHTML = await getResponse.text();
 
-    const $ = cheerio.load(html);
+    const $ = cheerio.load(getHTML);
 
     const token = $('meta[name="csrf-token"]').attr("content");
 
-    const cookie = page.headers.get("set-cookie");
+    const cookie = getResponse.headers.get("set-cookie");
 
 
+    if (!token) {
+      return res.status(500).json({
+        error: "CSRF token missing"
+      });
+    }
+
+
+    // 2. POST Search
     const form = new URLSearchParams();
 
     form.append(
@@ -49,8 +57,7 @@ export default async function handler(req, res) {
     );
 
 
-    // POST request
-    const response = await fetch(
+    const postResponse = await fetch(
       "https://online.pnmc.gov.pk/track/nursing-professional",
       {
         method: "POST",
@@ -65,23 +72,53 @@ export default async function handler(req, res) {
     );
 
 
-    const result = await response.text();
+    const postHTML = await postResponse.text();
 
 
-    // Debug response
-    return res.json({
-      success: true,
-      length: result.length,
-      html: result.substring(0,3000)
+    const $$ = cheerio.load(postHTML);
+
+
+    let data = {};
+
+
+    $$("table tr").each((index, row)=>{
+
+      const columns = $$(row).find("td");
+
+      if(columns.length >= 2){
+
+        const key = $$(columns[0])
+          .text()
+          .replace(/\s+/g," ")
+          .trim();
+
+        const value = $$(columns[1])
+          .text()
+          .replace(/\s+/g," ")
+          .trim();
+
+
+        if(key){
+          data[key] = value;
+        }
+
+      }
+
     });
 
 
-  } catch (error) {
+    return res.json({
+      success:true,
+      data:data
+    });
+
+
+  } catch(error){
 
     return res.status(500).json({
-      error: error.message
+      error:error.message
     });
 
   }
 
-}
+                       }
