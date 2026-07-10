@@ -1,3 +1,5 @@
+import * as cheerio from "cheerio";
+
 export default async function handler(req, res) {
 
   try {
@@ -27,10 +29,9 @@ export default async function handler(req, res) {
       "https://online.pnmc.gov.pk/track/nursing-professional",
       {
         method:"POST",
-
         headers:{
           "User-Agent":
-          "Mozilla/5.0 (Linux; Android 11; RMX2103 Build/RKQ1.201217.002) AppleWebKit/537.36 Chrome/149.0.7827.160 Mobile Safari/537.36",
+          "Mozilla/5.0 (Linux; Android 11)",
 
           "Content-Type":
           "application/x-www-form-urlencoded",
@@ -49,7 +50,6 @@ export default async function handler(req, res) {
         },
 
         body:body.toString()
-
       }
     );
 
@@ -57,17 +57,46 @@ export default async function handler(req, res) {
     const html = await response.text();
 
 
-    res.setHeader(
-      "content-type",
-      "text/html"
-    );
+    const $ = cheerio.load(html);
 
-    res.send(html);
+
+    let data = {};
+
+
+    $("table tr").each((i,row)=>{
+
+      const cols = $(row).find("td");
+
+      if(cols.length >= 2){
+
+        const key = $(cols[0])
+          .text()
+          .trim();
+
+        const value = $(cols[1])
+          .text()
+          .replace(/\s+/g," ")
+          .trim();
+
+
+        data[key] = value;
+
+      }
+
+    });
+
+
+    res.json({
+      success:true,
+      data:data
+    });
 
 
   } catch(error){
 
-    res.status(500).send(error.message);
+    res.status(500).json({
+      error:error.message
+    });
 
   }
 
