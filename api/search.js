@@ -1,191 +1,175 @@
 import * as cheerio from "cheerio";
 
-export default async function handler(req, res) {
+export default async function handler(req,res){
 
-  try {
+try{
 
-    let cnic = req.query.cnic;
+let cnic=req.query.cnic;
 
+if(!cnic){
+return res.status(400).json({
+success:false,
+error:"CNIC required"
+});
+}
 
-    if (!cnic) {
-      return res.status(400).json({
-        success:false,
-        error:"CNIC required"
-      });
-    }
 
+cnic=cnic.replace(/-/g,"");
 
-    // Remove dashes and convert to PNMC format
-    cnic = cnic.replace(/-/g, "");
+if(cnic.length===13){
+cnic =
+cnic.substring(0,5)+"-"+
+cnic.substring(5,12)+"-"+
+cnic.substring(12);
+}
 
 
-    if (cnic.length === 13) {
+// 1. GET fresh session
 
-      cnic =
-        cnic.substring(0,5) +
-        "-" +
-        cnic.substring(5,12) +
-        "-" +
-        cnic.substring(12);
+const session = await fetch(
+"https://online.pnmc.gov.pk/track/nursing-professional",
+{
+headers:{
+"User-Agent":"Mozilla/5.0 (Linux; Android 11)"
+}
+});
 
-    }
 
+const page = await session.text();
 
 
-    const body = new URLSearchParams();
+// Get cookies
 
+const cookies =
+session.headers.get("set-cookie");
 
-    body.append(
-      "track_nursing_professional[username]",
-      cnic
-    );
 
+// Get token
 
-    body.append(
-      "track_nursing_professional[search]",
-      ""
-    );
+const $ = cheerio.load(page);
 
+const token =
+$("input[name='track_nursing_professional[_token]']")
+.val();
 
-    body.append(
-      "track_nursing_professional[_token]",
-      "AFJ5AX5M5gaOO2DAq9jz--_q6TkbcusHrNeCuxst8xg"
-    );
 
+if(!token){
+throw new Error("Token not found");
+}
 
 
-    const response = await fetch(
-      "https://online.pnmc.gov.pk/track/nursing-professional",
-      {
-        method:"POST",
 
-        headers:{
+// 2. POST request
 
-          "User-Agent":
-          "Mozilla/5.0 (Linux; Android 11)",
+const body=new URLSearchParams();
 
+body.append(
+"track_nursing_professional[username]",
+cnic
+);
 
-          "Content-Type":
-          "application/x-www-form-urlencoded",
+body.append(
+"track_nursing_professional[search]",
+""
+);
 
+body.append(
+"track_nursing_professional[_token]",
+token
+);
 
-          "Cookie":
-          "PHPSESSID=f4fde2all3d866lo2nfn04gjp4; _gid=GA1.3.1491353095.1783684000",
 
 
-          "X-Requested-With":
-          "mark.via.gp",
+const response = await fetch(
+"https://online.pnmc.gov.pk/track/nursing-professional",
+{
+method:"POST",
 
+headers:{
+"User-Agent":"Mozilla/5.0 (Linux; Android 11)",
 
-          "Origin":
-          "https://online.pnmc.gov.pk",
+"Content-Type":
+"application/x-www-form-urlencoded",
 
+"Cookie":cookies,
 
-          "Referer":
-          "https://online.pnmc.gov.pk/track/nursing-professional"
+"Origin":
+"https://online.pnmc.gov.pk",
 
-        },
+"Referer":
+"https://online.pnmc.gov.pk/track/nursing-professional"
+},
 
+body:body.toString()
 
-        body:body.toString()
+});
 
-      }
-    );
 
+const html=await response.text();
 
+const $$=cheerio.load(html);
 
-    const html = await response.text();
 
+let data={};
 
 
-    const $ = cheerio.load(html);
+$$("table tr").each((i,row)=>{
 
+const cols=$$(row).find("td");
 
+if(cols.length>=2){
 
-    let data = {};
+let key=$$(cols[0])
+.text()
+.replace(/\s+/g," ")
+.trim();
 
+let value=$$(cols[1])
+.text()
+.replace(/\s+/g," ")
+.trim();
 
 
-    $("table tr").each((i,row)=>{
+if(key){
+data[key]=value;
+}
 
+}
 
-      const cols = $(row).find("td");
+});
 
 
 
-      if(cols.length >= 2){
+let photo=null;
 
+const img=$$("img[src*='/uploads/media/']")
+.first();
 
-        const key = $(cols[0])
-          .text()
-          .replace(/\s+/g," ")
-          .trim();
 
+if(img.length){
 
+photo=
+"https://online.pnmc.gov.pk"+
+img.attr("src");
 
-        const value = $(cols[1])
-          .text()
-          .replace(/\s+/g," ")
-          .trim();
+}
 
 
 
-        if(key){
+res.json({
+success:true,
+data:data,
+photo:photo
+});
 
-          data[key] = value;
 
-        }
+}catch(error){
 
-      }
+res.status(500).json({
+success:false,
+error:error.message
+});
 
-
-    });
-
-
-
-    // Profile Photo
-
-    let photo = null;
-
-
-    const img = $("img[src*='/uploads/media/']").first();
-
-
-
-    if(img.length){
-
-      photo =
-      "https://online.pnmc.gov.pk" +
-      img.attr("src");
-
-    }
-
-
-
-    res.json({
-
-      success:true,
-
-      data:data,
-
-      photo:photo
-
-    });
-
-
-
-  } catch(error){
-
-
-    res.status(500).json({
-
-      success:false,
-
-      error:error.message
-
-    });
-
-
-  }
+}
 
 }
