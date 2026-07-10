@@ -12,6 +12,7 @@ export default async function handler(req, res) {
 
   try {
 
+    // GET page
     const page = await fetch(
       "https://online.pnmc.gov.pk/track/nursing-professional",
       {
@@ -28,13 +29,6 @@ export default async function handler(req, res) {
     const token = $('meta[name="csrf-token"]').attr("content");
 
     const cookie = page.headers.get("set-cookie");
-
-
-    if (!token) {
-      return res.status(500).json({
-        error: "CSRF token not found"
-      });
-    }
 
 
     const form = new URLSearchParams();
@@ -55,6 +49,7 @@ export default async function handler(req, res) {
     );
 
 
+    // POST request
     const response = await fetch(
       "https://online.pnmc.gov.pk/track/nursing-professional",
       {
@@ -62,7 +57,8 @@ export default async function handler(req, res) {
         headers: {
           "Content-Type": "application/x-www-form-urlencoded",
           "Cookie": cookie || "",
-          "User-Agent": "Mozilla/5.0"
+          "User-Agent": "Mozilla/5.0",
+          "Referer": "https://online.pnmc.gov.pk/track/nursing-professional"
         },
         body: form.toString()
       }
@@ -71,30 +67,12 @@ export default async function handler(req, res) {
 
     const result = await response.text();
 
-    const $$ = cheerio.load(result);
 
-    let data = {};
-
-
-    $$("table tr").each((i, row) => {
-
-      const cols = $$(row).find("td");
-
-      if (cols.length >= 2) {
-
-        const key = $$(cols[0]).text().trim();
-        const value = $$(cols[1]).text().trim();
-
-        data[key] = value;
-
-      }
-
-    });
-
-
+    // Debug response
     return res.json({
       success: true,
-      data
+      length: result.length,
+      html: result.substring(0,3000)
     });
 
 
