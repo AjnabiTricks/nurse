@@ -4,7 +4,15 @@ export default async function handler(req, res) {
 
   try {
 
-    const cnic = req.query.cnic || "17301-1348281-0";
+    const cnic = req.query.cnic;
+
+
+    if (!cnic) {
+      return res.status(400).json({
+        success:false,
+        error:"CNIC required"
+      });
+    }
 
 
     const body = new URLSearchParams();
@@ -95,7 +103,9 @@ export default async function handler(req, res) {
     // Profile Picture
     let photo = null;
 
+
     const img = $("img[src*='/uploads/media/']").first();
+
 
     if(img.length){
 
