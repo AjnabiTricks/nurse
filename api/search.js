@@ -1,12 +1,82 @@
 import * as cheerio from "cheerio";
+import { CookieJar } from "tough-cookie";
+
 
 export default async function handler(req, res) {
 
+  const cnic = req.query.cnic;
+
+  if (!cnic) {
+    return res.status(400).json({
+      success:false,
+      error:"CNIC required"
+    });
+  }
+
+
   try {
 
-    const cnic = req.query.cnic || "17301-1348281-0";
+    const jar = new CookieJar();
 
 
+    const url =
+    "https://online.pnmc.gov.pk/track/nursing-professional";
+
+
+    // 1. GET page
+    const getResponse = await fetch(url,{
+      headers:{
+        "User-Agent":
+        "Mozilla/5.0 (Linux; Android 11)"
+      }
+    });
+
+
+    const getHTML = await getResponse.text();
+
+
+    // Save cookies
+    const setCookie =
+    getResponse.headers.get("set-cookie");
+
+
+    if (setCookie) {
+
+      const cookies = setCookie.split(",");
+
+      for (const cookie of cookies) {
+
+        await jar.setCookie(
+          cookie,
+          url
+        );
+
+      }
+    }
+
+
+    // Extract CSRF
+    const $ = cheerio.load(getHTML);
+
+    const token =
+    $('meta[name="csrf-token"]')
+    .attr("content");
+
+
+    if (!token) {
+      return res.status(500).json({
+        success:false,
+        error:"CSRF token not found"
+      });
+    }
+
+
+    const cookieHeader =
+    await jar.getCookieString(url);
+
+
+
+    // 2. POST Search
     const body = new URLSearchParams();
 
     body.append(
@@ -21,83 +91,107 @@ export default async function handler(req, res) {
 
     body.append(
       "track_nursing_professional[_token]",
-      "AFJ5AX5M5gaOO2DAq9jz--_q6TkbcusHrNeCuxst8xg"
+      token
     );
 
 
-    const response = await fetch(
-      "https://online.pnmc.gov.pk/track/nursing-professional",
-      {
-        method:"POST",
-        headers:{
-          "User-Agent":
-          "Mozilla/5.0 (Linux; Android 11)",
+    const response = await fetch(url,{
 
-          "Content-Type":
-          "application/x-www-form-urlencoded",
+      method:"POST",
 
-          "Cookie":
-          "PHPSESSID=f4fde2all3d866lo2nfn04gjp4; _gid=GA1.3.1491353095.1783684000",
+      headers:{
 
-          "X-Requested-With":
-          "mark.via.gp",
+        "User-Agent":
+        "Mozilla/5.0 (Linux; Android 11)",
 
-          "Origin":
-          "https://online.pnmc.gov.pk",
+        "Content-Type":
+        "application/x-www-form-urlencoded",
 
-          "Referer":
-          "https://online.pnmc.gov.pk/track/nursing-professional"
-        },
+        "Cookie":
+        cookieHeader,
 
-        body:body.toString()
-      }
-    );
+        "X-Requested-With":
+        "mark.via.gp",
 
+        "Origin":
+        "https://online.pnmc.gov.pk",
 
-    const html = await response.text();
+        "Referer":
+        url
 
+      },
 
-    const $ = cheerio.load(html);
+      body:body.toString()
+
+    });
 
 
-    let data = {};
+
+    const html =
+    await response.text();
 
 
-    $("table tr").each((i,row)=>{
+    const $$ =
+    cheerio.load(html);
 
-      const cols = $(row).find("td");
+
+    let data={};
+
+
+    $$("table tr").each((i,row)=>{
+
+      const cols =
+      $$(row).find("td");
+
 
       if(cols.length >= 2){
 
-        const key = $(cols[0])
-          .text()
-          .trim();
-
-        const value = $(cols[1])
-          .text()
-          .replace(/\s+/g," ")
-          .trim();
+        const key =
+        $$(cols[0])
+        .text()
+        .replace(/\s+/g," ")
+        .trim();
 
 
-        data[key] = value;
+        const value =
+        $$(cols[1])
+        .text()
+        .replace(/\s+/g," ")
+        .trim();
+
+
+        if(key){
+          data[key]=value;
+        }
 
       }
 
     });
 
 
-    res.json({
+
+    return res.json({
+
       success:true,
-      data:data
+
+      data:data,
+
+      token_refreshed:true
+
     });
+
 
 
   } catch(error){
 
-    res.status(500).json({
+    return res.status(500).json({
+
+      success:false,
+
       error:error.message
+
     });
 
   }
 
-}
+        }
